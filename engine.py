@@ -218,6 +218,8 @@ class Camera:
         self.speed = 4.5
         self.mouse_sensitivity = 0.15
         self.velocity = Vector3(0, 0, 0)
+        self.momentum_x = 0.0
+        self.momentum_z = 0.0
         self.gravity = -9.8
         self.on_ground = True
         self.jump_power = 4.8
@@ -266,24 +268,64 @@ class Camera:
         if keys.get(glfw.KEY_D):
             move_vec = move_vec + right * move_dist
 
+        # Apply momentum (from grapple etc.)
+        move_vec.x += self.momentum_x * delta_time
+        move_vec.z += self.momentum_z * delta_time
+
+        # Decay momentum with friction
+        if self.on_ground:
+            friction = 5.0
+        else:
+            friction = 1.5
+        self.momentum_x -= self.momentum_x * friction * delta_time
+        self.momentum_z -= self.momentum_z * friction * delta_time
+        # Kill tiny momentum
+        if abs(self.momentum_x) < 0.1:
+            self.momentum_x = 0.0
+        if abs(self.momentum_z) < 0.1:
+            self.momentum_z = 0.0
+
         if collision_objects:
             if move_vec.x != 0:
                 test_pos_x = Vector3(self.pos.x + move_vec.x, self.pos.y, self.pos.z)
                 if not self.check_collision(test_pos_x, collision_objects):
                     self.pos.x = test_pos_x.x
+                else:
+                    self.momentum_x = 0.0
             if move_vec.z != 0:
                 test_pos_z = Vector3(self.pos.x, self.pos.y, self.pos.z + move_vec.z)
                 if not self.check_collision(test_pos_z, collision_objects):
                     self.pos.z = test_pos_z.z
+                else:
+                    self.momentum_z = 0.0
         else:
             self.pos.x += move_vec.x
             self.pos.z += move_vec.z
 
+        ground_y = 1.5
+        if collision_objects:
+            for obj in collision_objects:
+                if not obj.active:
+                    continue
+                if hasattr(obj, 'pos') and hasattr(obj, 'width') and hasattr(obj, 'height'):
+                    depth = getattr(obj, 'depth', obj.width)
+                    half_w = obj.width / 2.0
+                    half_d = depth / 2.0
+                    if (self.pos.x + self.radius > obj.pos.x - half_w and
+                        self.pos.x - self.radius < obj.pos.x + half_w and
+                        self.pos.z + self.radius > obj.pos.z - half_d and
+                        self.pos.z - self.radius < obj.pos.z + half_d):
+                        obj_top = obj.pos.y + obj.height / 2.0
+                        if self.pos.y - 1.5 >= obj_top - 0.2:
+                            candidate = obj_top + 1.5
+                            if candidate > ground_y:
+                                ground_y = candidate
+
         self.velocity.y += self.gravity * delta_time
         self.pos.y += self.velocity.y * delta_time
 
-        if self.pos.y <= 1.5:
-            self.pos.y = 1.5
+        if self.pos.y <= ground_y:
+            self.pos.y = ground_y
             self.velocity.y = 0
             self.on_ground = True
             self.can_jump = True
@@ -307,15 +349,19 @@ class Camera:
         player_top = test_pos.y + 0.2
         pr = self.radius
         for obj in collision_objects:
+            if not obj.active:
+                continue
             if hasattr(obj, 'pos') and hasattr(obj, 'width') and hasattr(obj, 'height'):
-                obj_bottom = obj.pos.y - obj.height / 2
-                obj_top = obj.pos.y + obj.height / 2
-                if player_bottom < obj_top and player_top > obj_bottom:
+                obj_bottom = obj.pos.y - obj.height / 2.0
+                obj_top = obj.pos.y + obj.height / 2.0
+                if player_bottom < obj_top - 0.05 and player_top > obj_bottom + 0.05:
                     depth = getattr(obj, 'depth', obj.width)
-                    if (test_pos.x + pr > obj.pos.x - obj.width / 2 and
-                        test_pos.x - pr < obj.pos.x + obj.width / 2 and
-                        test_pos.z + pr > obj.pos.z - depth / 2 and
-                        test_pos.z - pr < obj.pos.z + depth / 2):
+                    half_w = obj.width / 2.0
+                    half_d = depth / 2.0
+                    if (test_pos.x + pr > obj.pos.x - half_w and
+                        test_pos.x - pr < obj.pos.x + half_w and
+                        test_pos.z + pr > obj.pos.z - half_d and
+                        test_pos.z - pr < obj.pos.z + half_d):
                         return True
         return False
 
@@ -474,12 +520,10 @@ class Engine:
         self.tex_floor = make_tex((20, 20, 25), (5, 5, 8))
         self.tex_pillar = make_tex((220, 0, 220), (35, 0, 55))
         glEnable(GL_DEPTH_TEST)
-        glClearColor(0.01, 0.01, 0.015, 1)
-        glEnable(GL_FOG)
-        glFogf(GL_FOG_START, 5.0)
-        glFogf(GL_FOG_END, 40.0)
-        glFogi(GL_FOG_MODE, GL_LINEAR)
-        glFogfv(GL_FOG_COLOR, (0.01, 0.01, 0.015, 1.0))
+        self.fog_enabled = True
+        self.fog_start = 5.0
+        self.fog_end = 40.0
+        self.fog_color = (0.01, 0.01, 0.015, 1.0)
         glMatrixMode(GL_PROJECTION)
         gluPerspective(fov, (width / height), 0.1, 500.0)
         glMatrixMode(GL_MODELVIEW)
@@ -649,6 +693,17 @@ class Engine:
         self.camera.update(keys, mouse_delta, self.delta_time, sprint, self.objects)
 
     def render(self):
+        if self.fog_enabled:
+            glEnable(GL_FOG)
+            glFogf(GL_FOG_START, self.fog_start)
+            glFogf(GL_FOG_END, self.fog_end)
+            glFogi(GL_FOG_MODE, GL_LINEAR)
+            glFogfv(GL_FOG_COLOR, self.fog_color)
+            glClearColor(self.fog_color[0], self.fog_color[1], self.fog_color[2], self.fog_color[3])
+        else:
+            glDisable(GL_FOG)
+            glClearColor(0.0, 0.0, 0.0, 1.0)
+
         if self.retro_mode:
             glBindFramebuffer(GL_FRAMEBUFFER, self.fbo)
             glViewport(0, 0, self.retro_w, self.retro_h)
