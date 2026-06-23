@@ -1,11 +1,9 @@
-import os
-import glfw
-import random
+from engine import (Engine, Platform, Ceiling, Pillar, Vector3, GameObjectBase,
+                    Skybox, Notifications, load_sprite, ray_sphere_intersection,
+                    os, glfw, random, math, Image)
 from OpenGL.GL import *
 from OpenGL.GLU import *
-from PIL import Image
-from engine import Engine, Platform, Ceiling, Pillar, Vector3, GameObjectBase
-import math
+import sys
 
 class Enemy(GameObjectBase):
     def __init__(self, pos):
@@ -27,66 +25,96 @@ class Enemy(GameObjectBase):
         glPopMatrix()
 
 class Game(Engine):
+    def load_editor_scene(self, path):
+        import json
+        with open(path, "r") as f:
+            data = json.load(f)
+        self.objects = []
+        for d in data:
+            t = d.get("type", "")
+            p = d.get("pos", [0, 0, 0])
+            pos = Vector3(p[0], p[1], p[2])
+            if t == "Pillar":
+                obj = Pillar(pos, height=d.get("height", 4.0), width=d.get("width", 1.5), depth=d.get("depth", 1.5))
+                mat = d.get("material", "pink")
+                obj.tex_id = self.tex_pillar if mat == "pink" else (self.tex_floor if mat == "gray" else 0)
+                self.objects.append(obj)
+            elif t == "Platform":
+                obj = Platform(size=d.get("size", 150), grid_size=10)
+                mat = d.get("material", "gray")
+                obj.tex_id = self.tex_floor if mat == "gray" else (self.tex_pillar if mat == "pink" else 0)
+                self.terrain = obj
+            elif t == "Enemy":
+                self.objects.append(Enemy(pos))
+            elif t == "PlayerSpawn":
+                self.camera.pos = pos
+
     def on_init(self):
         random.seed(42)
-        self.terrain = Platform(size=150, grid_size=10, tex_id=self.tex_floor)
+        self.skybox = Skybox(top_color=(0.08, 0.08, 0.25), horizon_color=(0.2, 0.15, 0.4),
+                             ground_color=(0.02, 0.0, 0.03))
+        self.lighting.ambient_color = (0.3, 0.25, 0.35)
+        self.lighting.diffuse_color = (0.7, 0.7, 0.8)
+        self.lighting.specular_color = (0.4, 0.4, 0.5)
+        self.lighting.light_direction = Vector3(1, 1.5, 0.5).normalize()
         self.ceiling = None
-        
-        for _ in range(15):
-            px = random.uniform(-45, 45)
-            pz = random.uniform(-45, 45)
-            ph = random.uniform(1.0, 5.0)
-            pw = random.uniform(8.0, 16.0)
-            pd = random.uniform(8.0, 16.0)
-            self.objects.append(Pillar(Vector3(px, ph/2.0, pz), height=ph, width=pw, depth=pd, tex_id=self.tex_pillar))
-
-        for _ in range(10):
-            px = random.uniform(-60, 60)
-            pz = random.uniform(-60, 60)
-            if abs(px) < 12 and abs(pz) < 12:
-                px += 25
-            ph = random.uniform(12.0, 30.0)
-            pw = random.uniform(4.0, 8.0)
-            self.objects.append(Pillar(Vector3(px, ph/2.0, pz), height=ph, width=pw, depth=pw, tex_id=self.tex_pillar))
-
-        for _ in range(8):
-            ex = random.uniform(-40, 40)
-            ez = random.uniform(-40, 40)
-            if abs(ex) < 12 and abs(ez) < 12:
-                ex += 20
-            self.objects.append(Enemy(Vector3(ex, 1.5, ez)))
-
-        self.camera.pos = Vector3(0, 1.5, 18)
+        if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
+            self.load_editor_scene(sys.argv[1])
+        else:
+            self.terrain = Platform(size=150, grid_size=10, tex_id=self.tex_floor)
+            for _ in range(15):
+                px = random.uniform(-45, 45)
+                pz = random.uniform(-45, 45)
+                ph = random.uniform(1.0, 5.0)
+                pw = random.uniform(8.0, 16.0)
+                pd = random.uniform(8.0, 16.0)
+                self.objects.append(Pillar(Vector3(px, ph/2.0, pz), height=ph, width=pw, depth=pd, tex_id=self.tex_pillar))
+            for _ in range(10):
+                px = random.uniform(-60, 60)
+                pz = random.uniform(-60, 60)
+                if abs(px) < 12 and abs(pz) < 12:
+                    px += 25
+                ph = random.uniform(12.0, 30.0)
+                pw = random.uniform(4.0, 8.0)
+                self.objects.append(Pillar(Vector3(px, ph/2.0, pz), height=ph, width=pw, depth=pw, tex_id=self.tex_pillar))
+            for _ in range(8):
+                ex = random.uniform(-40, 40)
+                ez = random.uniform(-40, 40)
+                if abs(ex) < 12 and abs(ez) < 12:
+                    ex += 20
+                self.objects.append(Enemy(Vector3(ex, 1.5, ez)))
+            self.camera.pos = Vector3(0, 1.5, 18)
         self.fog_enabled = True
         self.fog_color = (0.02, 0.0, 0.03, 1.0)
         self.fog_start = 10.0
         self.fog_end = 75.0
+        self.show_notification("Game Started - Find and destroy the enemies!", 3.0, 0.6, 0.8, 1.0)
         dir_path = os.path.dirname(os.path.abspath(__file__))
         self.idle_frames = []
         for filename in ["Idle1.png", "Idle2.png"]:
             path = os.path.join(dir_path, filename)
             if os.path.exists(path):
-                tex, w, h = self.load_sprite(path)
+                tex, w, h = load_sprite(path)
                 self.idle_frames.append((tex, w, h))
         if not self.idle_frames:
             fallback_path = os.path.join(dir_path, "Idle.png")
             if os.path.exists(fallback_path):
-                tex, w, h = self.load_sprite(fallback_path)
+                tex, w, h = load_sprite(fallback_path)
                 self.idle_frames.append((tex, w, h))
         self.shoot_frame = None
         for filename in ["Shoot.png", "GunShoot.png", "MuzzleFlash.png"]:
             path = os.path.join(dir_path, filename)
             if os.path.exists(path):
-                self.shoot_frame = self.load_sprite(path)
+                self.shoot_frame = load_sprite(path)
                 break
         self.flip_frame = None
         path = os.path.join(dir_path, "FlipOff.png")
         if os.path.exists(path):
-            self.flip_frame = self.load_sprite(path)
+            self.flip_frame = load_sprite(path)
         self.grapple_frame = None
         path = os.path.join(dir_path, "Grapple.png")
         if os.path.exists(path):
-            self.grapple_frame = self.load_sprite(path)
+            self.grapple_frame = load_sprite(path)
         self.current_frame_index = 0
         self.anim_timer = 0.0
         self.frame_duration = 1.0
@@ -101,57 +129,8 @@ class Game(Engine):
         self.grapple_vel = Vector3(0, 0, 0)
         self.grapple_hold_time = 0.0
         self.tracers = []
+        self.impacts = []
         self.init_scene()
-
-    def load_sprite(self, path, threshold=240):
-        img = Image.open(path).convert("RGBA")
-        pixels = img.getdata()
-        new_pixels = []
-        for r, g, b, a in pixels:
-            if r > threshold and g > threshold and b > threshold:
-                new_pixels.append((r, g, b, 0))
-            else:
-                new_pixels.append((r, g, b, a))
-        img.putdata(new_pixels)
-        img = img.transpose(Image.FLIP_TOP_BOTTOM)
-        raw = img.tobytes("raw", "RGBA")
-        tex = glGenTextures(1)
-        glBindTexture(GL_TEXTURE_2D, tex)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, raw)
-        return tex, img.width, img.height
-
-    def raycast(self, start, direction):
-        hit_dist = 999.0
-        hit_pos = None
-        if direction.y < 0:
-            d = -start.y / direction.y
-            if 0 < d < hit_dist:
-                hit_dist = d
-                hit_pos = start + direction * d
-        from engine import Pillar
-        for obj in self.objects:
-            if not obj.active or not isinstance(obj, Pillar):
-                continue
-            half_w = obj.width / 2.0
-            half_d = obj.depth / 2.0
-            min_x, max_x = obj.pos.x - half_w, obj.pos.x + half_w
-            min_y, max_y = obj.pos.y - obj.height / 2.0, obj.pos.y + obj.height / 2.0
-            min_z, max_z = obj.pos.z - half_d, obj.pos.z + half_d
-            t1 = (min_x - start.x) / (direction.x if direction.x != 0 else 1e-6)
-            t2 = (max_x - start.x) / (direction.x if direction.x != 0 else 1e-6)
-            t3 = (min_y - start.y) / (direction.y if direction.y != 0 else 1e-6)
-            t4 = (max_y - start.y) / (direction.y if direction.y != 0 else 1e-6)
-            t5 = (min_z - start.z) / (direction.z if direction.z != 0 else 1e-6)
-            t6 = (max_z - start.z) / (direction.z if direction.z != 0 else 1e-6)
-            tmin = max(min(t1, t2), min(t3, t4), min(t5, t6))
-            tmax = min(max(t1, t2), max(t3, t4), max(t5, t6))
-            if tmax >= 0 and tmin <= tmax:
-                if 0 < tmin < hit_dist:
-                    hit_dist = tmin
-                    hit_pos = start + direction * tmin
-        return hit_pos
 
     def on_update(self, delta_time):
         for obj in self.objects:
@@ -160,13 +139,11 @@ class Game(Engine):
         self.tracers = [t for t in self.tracers if t["timer"] > 0]
         for t in self.tracers:
             t["timer"] -= delta_time
-            t["pos"] = t["pos"] + t["dir"] * (t["speed"] * delta_time)
-            for obj in self.objects:
-                if isinstance(obj, Enemy) and obj.active:
-                    if (t["pos"] - obj.pos).length() < 0.9:
-                        obj.active = False
-                        t["timer"] = 0.0
-                        break
+        self.impacts = [i for i in self.impacts if i["timer"] > 0]
+        for i in self.impacts:
+            i["timer"] -= delta_time
+            for p in i["particles"]:
+                p["pos"] = p["pos"] + p["vel"] * delta_time
         if self.flip_cooldown_timer > 0:
             self.flip_cooldown_timer -= delta_time
         if self.shooting:
@@ -262,18 +239,55 @@ class Game(Engine):
                 right.x * forward.y - right.y * forward.x
             ).normalize()
             start_pos = self.camera.pos + (forward * 1.2) + (right * (base_right - offset_left)) - (up * (base_down - offset_up))
-            # Spawn bullet logic directly from camera.pos to ensure close-up hits
+            
+            # Raycast from camera center to find where we're aiming
+            hit_pos = self.scene_raycast(self.camera.pos, forward)
+            cam_hit = self.camera.pos + forward * 200.0
+            if hit_pos is not None:
+                cam_hit = hit_pos
+
+            # Check enemy hit (closer takes priority)
+            for obj in self.objects:
+                if isinstance(obj, Enemy) and obj.active:
+                    dist = ray_sphere_intersection(self.camera.pos, forward, obj.pos, 0.8)
+                    if dist is not None:
+                        enemy_hit = self.camera.pos + forward * dist
+                        if (enemy_hit - self.camera.pos).length() < (cam_hit - self.camera.pos).length():
+                            cam_hit = enemy_hit
+                            obj.active = False
+                            self.show_notification("Enemy destroyed! +100", 1.5, 1.0, 0.6, 0.2)
+
+            # Tracer from hand to camera-aim point
             self.tracers.append({
-                "pos": self.camera.pos,
-                "draw_pos": start_pos, # For drawing from muzzle
-                "dir": forward,
+                "start": start_pos,
+                "end": cam_hit,
                 "speed": 60,
-                "length": 1,
-                "timer": 2
+                "timer": 2,
             })
-        elif button == glfw.MOUSE_BUTTON_RIGHT:
+
+            # Impact burst at hit point
+            particles = []
+            for _ in range(6):
+                angle1 = random.uniform(0, math.pi * 2)
+                angle2 = random.uniform(0, math.pi * 2)
+                speed = random.uniform(2, 5)
+                vel = Vector3(math.cos(angle1) * math.sin(angle2) * speed,
+                              math.cos(angle2) * speed,
+                              math.sin(angle1) * math.sin(angle2) * speed)
+                particles.append({"pos": cam_hit, "vel": vel})
+            self.impacts.append({"particles": particles, "timer": 0.4})
+
+    def on_key(self, key, scancode, action, mods):
+        if key == glfw.KEY_F and action == glfw.PRESS:
+            if not self.shooting and not self.grappling and self.flip_cooldown_timer <= 0:
+                self.flipping = True
+                self.flip_timer = 1.0
+                self.flip_cooldown_timer = 15.0
+        
+        # Grapple functionality shifted from right click to the Q key
+        if key == glfw.KEY_Q:
             if action == glfw.PRESS:
-                hit = self.raycast(self.camera.pos, self.camera.get_forward())
+                hit = self.scene_raycast(self.camera.pos, self.camera.get_forward())
                 if hit is not None:
                     self.grappling = True
                     self.grapple_point = hit
@@ -292,13 +306,6 @@ class Game(Engine):
                 self.grapple_point = None
                 self.grapple_vel = Vector3(0, 0, 0)
                 self.grapple_hold_time = 0.0
-
-    def on_key(self, key, scancode, action, mods):
-        if key == glfw.KEY_F and action == glfw.PRESS:
-            if not self.shooting and not self.grappling and self.flip_cooldown_timer <= 0:
-                self.flipping = True
-                self.flip_timer = 1.0
-                self.flip_cooldown_timer = 15.0
 
     def on_draw_3d(self):
         if self.grappling and self.grapple_point:
@@ -326,7 +333,7 @@ class Game(Engine):
             glEnd()
             glLineWidth(1.0)
             glEnable(GL_LIGHTING)
-        if not self.tracers:
+        if not self.tracers and not self.impacts:
             return
         glDisable(GL_LIGHTING)
         glDisable(GL_TEXTURE_2D)
@@ -337,11 +344,23 @@ class Game(Engine):
             alpha = max(0.0, min(1.0, t["timer"] / 0.15))
             glColor4f(1.0, 0.9, 0.3, alpha)
             glPushMatrix()
-            # Draw visual tracer from the hand/gun muzzle start pos (or current tracer position offset)
-            current_draw_pos = t["draw_pos"] + t["dir"] * (t["speed"] * (2.0 - t["timer"]))
-            glTranslatef(current_draw_pos.x, current_draw_pos.y, current_draw_pos.z)
+            elapsed = 2.0 - t["timer"]
+            total_dist = (t["end"] - t["start"]).length()
+            travel_time = total_dist / t["speed"] if total_dist > 0 else 0
+            progress = min(1.0, elapsed / travel_time) if travel_time > 0 else 1.0
+            pos = t["start"] + (t["end"] - t["start"]) * progress
+            glTranslatef(pos.x, pos.y, pos.z)
             gluSphere(quad, 0.12, 8, 8)
             glPopMatrix()
+        for i in self.impacts:
+            frac = i["timer"] / 0.4
+            for p in i["particles"]:
+                alpha = max(0.0, min(1.0, frac))
+                glColor4f(1.0, 0.9, 0.3, alpha)
+                glPushMatrix()
+                glTranslatef(p["pos"].x, p["pos"].y, p["pos"].z)
+                gluSphere(quad, 0.08, 6, 6)
+                glPopMatrix()
         gluDeleteQuadric(quad)
         glEnable(GL_LIGHTING)
 
@@ -385,20 +404,6 @@ class Game(Engine):
         glEnd()
         glDisable(GL_TEXTURE_2D)
 
-        # Draw small circle in middle
-        cx = self.width / 2.0
-        cy = self.height / 2.0
-        glColor4f(1.0, 1.0, 1.0, 0.8)
-        glBegin(GL_LINE_LOOP)
-        num_segments = 12
-        r = 4.0
-        for idx in range(num_segments):
-            theta = 2.0 * math.pi * float(idx) / float(num_segments)
-            tx = r * math.cos(theta)
-            ty = r * math.sin(theta)
-            glVertex2f(cx + tx, cy + ty)
-        glEnd()
-        
         glDisable(GL_BLEND)
         glEnable(GL_DEPTH_TEST)
         glPopMatrix()
