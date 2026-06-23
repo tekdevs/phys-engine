@@ -5,6 +5,6 @@
 - 
 - 
 
-<img width="992" height="816" alt="image" src="https://github.com/user-attachments/assets/a2bb4fb5-97bb-4564-95dc-f4fb8412dee6" />
+<img width="996" height="822" alt="image" src="https://github.com/user-attachments/assets/aef41521-0b61-4e51-adde-9af1206d862f" />
 
 **Preview game example**
