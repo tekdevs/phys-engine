@@ -1,4 +1,6 @@
 import glfw
+import os
+import random
 from OpenGL.GL import *
 from OpenGL.GLU import *
 import math
@@ -6,6 +8,62 @@ import time
 from PIL import Image, ImageDraw, ImageFont
 import threading
 from queue import Queue
+
+def load_sprite(path, threshold=240):
+    img = Image.open(path).convert("RGBA")
+    pixels = img.getdata()
+    new_pixels = []
+    for r, g, b, a in pixels:
+        if r > threshold and g > threshold and b > threshold:
+            new_pixels.append((r, g, b, 0))
+        else:
+            new_pixels.append((r, g, b, a))
+    img.putdata(new_pixels)
+    img = img.transpose(Image.FLIP_TOP_BOTTOM)
+    raw = img.tobytes("raw", "RGBA")
+    tex = glGenTextures(1)
+    glBindTexture(GL_TEXTURE_2D, tex)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width, img.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, raw)
+    return tex, img.width, img.height
+
+def ray_plane_intersection(start, direction, plane_y=0):
+    if direction.y >= 0:
+        return None
+    d = -start.y / direction.y
+    if d > 0:
+        return start + direction * d
+    return None
+
+def ray_aabb_intersection(start, direction, aabb_min, aabb_max):
+    t1 = (aabb_min[0] - start.x) / (direction.x if direction.x != 0 else 1e-6)
+    t2 = (aabb_max[0] - start.x) / (direction.x if direction.x != 0 else 1e-6)
+    t3 = (aabb_min[1] - start.y) / (direction.y if direction.y != 0 else 1e-6)
+    t4 = (aabb_max[1] - start.y) / (direction.y if direction.y != 0 else 1e-6)
+    t5 = (aabb_min[2] - start.z) / (direction.z if direction.z != 0 else 1e-6)
+    t6 = (aabb_max[2] - start.z) / (direction.z if direction.z != 0 else 1e-6)
+    tmin = max(min(t1, t2), min(t3, t4), min(t5, t6))
+    tmax = min(max(t1, t2), max(t3, t4), max(t5, t6))
+    if tmax >= 0 and tmin <= tmax:
+        return tmin
+    return None
+
+def ray_sphere_intersection(start, direction, center, radius):
+    v = start - center
+    half_b = v.dot(direction)
+    c = v.dot(v) - radius * radius
+    discriminant = half_b * half_b - c
+    if discriminant < 0:
+        return None
+    sqrt_disc = math.sqrt(discriminant)
+    t1 = -half_b - sqrt_disc
+    t2 = -half_b + sqrt_disc
+    if t1 > 0:
+        return t1
+    if t2 > 0:
+        return t2
+    return None
 
 def make_tex(c1, c2, size=4):
     t = glGenTextures(1)
@@ -83,8 +141,14 @@ class SimpleLighting:
         self.light_direction = Vector3(1, 1, 1).normalize()
         self.ambient_color = (0.4, 0.4, 0.4)
         self.diffuse_color = (0.8, 0.8, 0.8)
+        self.specular_color = (0.3, 0.3, 0.3)
+        self.enabled = True
 
     def enable(self):
+        if not self.enabled:
+            glDisable(GL_LIGHTING)
+            glDisable(GL_LIGHT0)
+            return
         glEnable(GL_LIGHTING)
         glEnable(GL_LIGHT0)
         glEnable(GL_COLOR_MATERIAL)
@@ -93,10 +157,11 @@ class SimpleLighting:
         glLight(GL_LIGHT0, GL_POSITION, light_pos)
         glLight(GL_LIGHT0, GL_AMBIENT, (*self.ambient_color, 1.0))
         glLight(GL_LIGHT0, GL_DIFFUSE, (*self.diffuse_color, 1.0))
-        glLight(GL_LIGHT0, GL_SPECULAR, (0.8, 0.8, 0.8, 1.0))
+        glLight(GL_LIGHT0, GL_SPECULAR, (*self.specular_color, 1.0))
         glEnable(GL_NORMALIZE)
 
     def disable(self):
+        self.enabled = False
         glDisable(GL_LIGHTING)
         glDisable(GL_LIGHT0)
 
@@ -434,6 +499,7 @@ class FPSCounter:
         self.culled_objects = 0
         self.total_objects = 0
         self.render_distance = 100.0
+        self.mode_label = "Retro"
 
     def update(self):
         self.frame_count += 1
@@ -446,7 +512,7 @@ class FPSCounter:
 
     def _create_text_texture(self):
         cull_ratio = 0 if self.total_objects == 0 else (self.culled_objects / self.total_objects) * 100
-        text = f"FPS: {self.fps} | Visible: {self.visible_objects}/{self.total_objects} | Culled: {cull_ratio:.1f}% | Render Dist: {self.render_distance:.1f}m"
+        text = f"FPS: {self.fps} | Render Mode: {self.mode_label} | Visible: {self.visible_objects}/{self.total_objects} | Culled: {cull_ratio:.1f}% | Render Dist: {self.render_distance:.1f}m"
         try:
             font = ImageFont.truetype("arial.ttf", 14)
         except:
@@ -498,6 +564,110 @@ class CullingThread(threading.Thread):
         self.running = False
         self.camera_pos_queue.put(None)
 
+class Notifications:
+    def __init__(self):
+        self.items = []
+
+    def add(self, text, duration=2.0, r=1, g=1, b=1):
+        self.items.append({"text": text, "timer": duration, "r": r, "g": g, "b": b,
+                           "tex": None, "w": 0, "h": 0})
+
+    def update(self, delta_time):
+        self.items = [i for i in self.items if i["timer"] > 0]
+        for item in self.items:
+            item["timer"] -= delta_time
+
+    def _make_tex(self, item):
+        try:
+            font = ImageFont.truetype("arial.ttf", 20)
+        except:
+            font = ImageFont.load_default()
+        text = item["text"]
+        dummy = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
+        bbox = ImageDraw.Draw(dummy).textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0] + 8
+        th = bbox[3] - bbox[1] + 8
+        img = Image.new('RGBA', (tw, th), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        draw.text((4, 4), text, font=font, fill=(255, 255, 255, 255))
+        item["tex"] = img.tobytes("raw", "RGBA", 0, -1)
+        item["w"] = img.width
+        item["h"] = img.height
+
+    def draw(self, width, height):
+        if not self.items:
+            return
+        glDisable(GL_DEPTH_TEST)
+        glDisable(GL_TEXTURE_2D)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, width, 0, height, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        y_offset = 60
+        for item in self.items:
+            if item["tex"] is None:
+                self._make_tex(item)
+            alpha = max(0.0, min(1.0, item["timer"] / 0.5))
+            glColor4f(item["r"], item["g"], item["b"], alpha)
+            cx = (width - item["w"]) / 2
+            glRasterPos2f(cx, y_offset)
+            glDrawPixels(item["w"], item["h"], GL_RGBA, GL_UNSIGNED_BYTE, item["tex"])
+            y_offset += item["h"] + 4
+        glDisable(GL_BLEND)
+        glEnable(GL_DEPTH_TEST)
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+
+class Skybox:
+    def __init__(self, top_color=(0.3, 0.5, 0.9), horizon_color=(0.7, 0.8, 1.0),
+                 ground_color=(0.3, 0.2, 0.1), size=500.0):
+        self.top_color = top_color
+        self.horizon_color = horizon_color
+        self.ground_color = ground_color
+        self.size = size
+        self.display_list = None
+        self._build()
+
+    def _build(self):
+        self.display_list = glGenLists(1)
+        glNewList(self.display_list, GL_COMPILE)
+        s = self.size * 0.5
+        tc = self.top_color
+        hc = self.horizon_color
+        gc = self.ground_color
+
+        glBegin(GL_QUADS)
+        for face in [
+            (( s, -s, -s), ( s, -s,  s), ( s,  s,  s), ( s,  s, -s)),  # right
+            ((-s, -s,  s), (-s, -s, -s), (-s,  s, -s), (-s,  s,  s)),  # left
+            ((-s,  s, -s), ( s,  s, -s), ( s, -s, -s), (-s, -s, -s)),  # front
+            (( s,  s,  s), (-s,  s,  s), (-s, -s,  s), ( s, -s,  s)),  # back
+            ((-s,  s, -s), (-s,  s,  s), ( s,  s,  s), ( s,  s, -s)),  # top
+            ((-s, -s,  s), (-s, -s, -s), ( s, -s, -s), ( s, -s,  s)),  # bottom
+        ]:
+            glColor3f(*tc); glVertex3f(*face[0])
+            glColor3f(*tc); glVertex3f(*face[1])
+            glColor3f(*gc); glVertex3f(*face[2])
+            glColor3f(*gc); glVertex3f(*face[3])
+        glEnd()
+        glEndList()
+
+    def draw(self, camera_pos):
+        glDisable(GL_LIGHTING)
+        glDisable(GL_DEPTH_TEST)
+        glPushMatrix()
+        glTranslatef(camera_pos.x, camera_pos.y, camera_pos.z)
+        glCallList(self.display_list)
+        glPopMatrix()
+        glEnable(GL_DEPTH_TEST)
+
 class Engine:
     def __init__(self, width=1000, height=800, fov=90, fps_limit=144, retro_mode=True):
         self.width = width
@@ -517,7 +687,7 @@ class Engine:
             raise RuntimeError("Failed to create window")
         glfw.make_context_current(self.window)
         glfw.set_input_mode(self.window, glfw.CURSOR, glfw.CURSOR_DISABLED)
-        self.tex_floor = make_tex((20, 20, 25), (5, 5, 8))
+        self.tex_floor = make_tex((65, 60, 70), (35, 30, 40))
         self.tex_pillar = make_tex((220, 0, 220), (35, 0, 55))
         glEnable(GL_DEPTH_TEST)
         self.fog_enabled = True
@@ -528,15 +698,12 @@ class Engine:
         gluPerspective(fov, (width / height), 0.1, 500.0)
         glMatrixMode(GL_MODELVIEW)
         self.camera = Camera(Vector3(0, 1.5, 18))
+        self.skybox = None
         self.terrain = None
         self.ceiling = None
         self.objects = []
-        if self.retro_mode:
-            self.lighting = SimpleLighting()
-            self.lighting.disable()
-        else:
-            self.lighting = AdvancedLighting()
-            self.lighting.enable()
+        self.lighting = SimpleLighting()
+        self.notifications = Notifications()
         self.fps_counter = FPSCounter()
         self.fps_counter.render_distance = self.view_distance
         self.fps_counter._create_text_texture()
@@ -546,6 +713,7 @@ class Engine:
         self.running = True
         self.delta_time = 0
         self.last_time = time.time()
+        self._key_cooldowns = {}
         
         glfw.set_mouse_button_callback(self.window, self._mouse_button_callback)
         glfw.set_key_callback(self.window, self._key_callback)
@@ -614,6 +782,31 @@ class Engine:
     def _key_callback(self, window, key, scancode, action, mods):
         self.on_key(key, scancode, action, mods)
 
+    def show_notification(self, text, duration=2.0, r=1, g=1, b=1):
+        self.notifications.add(text, duration, r, g, b)
+
+    def scene_raycast(self, start, direction):
+        hit_dist = 999.0
+        hit_pos = None
+        result = ray_plane_intersection(start, direction)
+        if result is not None:
+            d = (result - start).length()
+            if d < hit_dist:
+                hit_dist = d
+                hit_pos = result
+        for obj in self.objects:
+            if not obj.active or not isinstance(obj, Pillar):
+                continue
+            half_w = obj.width / 2.0
+            half_d = obj.depth / 2.0
+            aabb_min = (obj.pos.x - half_w, obj.pos.y - obj.height / 2.0, obj.pos.z - half_d)
+            aabb_max = (obj.pos.x + half_w, obj.pos.y + obj.height / 2.0, obj.pos.z + half_d)
+            d = ray_aabb_intersection(start, direction, aabb_min, aabb_max)
+            if d is not None and 0 < d < hit_dist:
+                hit_dist = d
+                hit_pos = start + direction * d
+        return hit_pos
+
     def on_init(self):
         pass
 
@@ -661,7 +854,18 @@ class Engine:
         self.fps_counter.visible_objects = sum(1 for obj in self.objects if obj.visible)
         self.fps_counter.culled_objects = len(self.objects) - self.fps_counter.visible_objects
 
+    def _key_pressed(self, key):
+        held = glfw.get_key(self.window, key) == glfw.PRESS
+        if held and self._key_cooldowns.get(key, 0) <= 0:
+            self._key_cooldowns[key] = 0.3
+            return True
+        return False
+
     def handle_events(self):
+        for k in list(self._key_cooldowns):
+            self._key_cooldowns[k] -= self.delta_time
+            if self._key_cooldowns[k] <= 0:
+                del self._key_cooldowns[k]
         if glfw.window_should_close(self.window):
             self.running = False
         glfw.poll_events()
@@ -674,17 +878,11 @@ class Engine:
             glfw.KEY_LEFT_CONTROL: glfw.get_key(self.window, glfw.KEY_LEFT_CONTROL),
         }
         sprint = glfw.get_key(self.window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS
-        if glfw.get_key(self.window, glfw.KEY_R) == glfw.PRESS:
-            self.retro_mode = not self.retro_mode
-            if self.retro_mode:
-                self.lighting.disable()
-            else:
-                self.lighting.enable()
         if glfw.get_key(self.window, glfw.KEY_ESCAPE) == glfw.PRESS:
             self.running = False
-        if glfw.get_key(self.window, glfw.KEY_C) == glfw.PRESS:
+        if self._key_pressed(glfw.KEY_C):
             self.culling_enabled = not self.culling_enabled
-        if glfw.get_key(self.window, glfw.KEY_L) == glfw.PRESS:
+        if self._key_pressed(glfw.KEY_L):
             self.lod_enabled = not self.lod_enabled
         mouse_x, mouse_y = glfw.get_cursor_pos(self.window)
         center_x, center_y = self.width / 2, self.height / 2
@@ -694,14 +892,12 @@ class Engine:
 
     def render(self):
         if self.fog_enabled:
-            glEnable(GL_FOG)
             glFogf(GL_FOG_START, self.fog_start)
             glFogf(GL_FOG_END, self.fog_end)
             glFogi(GL_FOG_MODE, GL_LINEAR)
             glFogfv(GL_FOG_COLOR, self.fog_color)
             glClearColor(self.fog_color[0], self.fog_color[1], self.fog_color[2], self.fog_color[3])
         else:
-            glDisable(GL_FOG)
             glClearColor(0.0, 0.0, 0.0, 1.0)
 
         if self.retro_mode:
@@ -711,6 +907,13 @@ class Engine:
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glLoadIdentity()
         self.camera.look_at()
+        glDisable(GL_FOG)
+        if self.skybox:
+            self.skybox.draw(self.camera.pos)
+        if self.fog_enabled:
+            glEnable(GL_FOG)
+        else:
+            glDisable(GL_FOG)
         self.update_culling()
         self.lighting.enable()
         if self.terrain:
@@ -730,6 +933,7 @@ class Engine:
             self.draw_fbo_quad()
 
         self.render_fps_text()
+        self.notifications.draw(self.width, self.height)
         glfw.swap_buffers(self.window)
 
     def render_fps_text(self):
@@ -758,6 +962,7 @@ class Engine:
                 self.delta_time = current_time - self.last_time
                 self.last_time = current_time
                 self.lighting.update(self.delta_time)
+                self.notifications.update(self.delta_time)
                 self.on_update(self.delta_time)
                 self.handle_events()
                 self.render()
