@@ -6,7 +6,7 @@
 - 3D Physics & Graphics Engine
 - Built-In Editor and IDE
 - Intuitive hierarchy and inspector to manage components
-- Transform Gizmos
+- Transform gizmos
 - Collision detection and matrix
 - Sprite & animation system
 - Project management
