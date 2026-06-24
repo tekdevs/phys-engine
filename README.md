@@ -6,11 +6,11 @@
 - 3D Physics & Graphics Engine
 - Built-In Editor and IDE
 - Intuitive hierarchy and inspector to manage components
-- Transform gizmos
+- Transform Gizmos
 - Collision detection and matrix
-- Sprite & animation system
+- Sprite & Animation system
 - Project management
-- Dynamic lighting & skybox
+- Dynamic lighting & Skybox
 - & Many, many more...
 
 ![Uploading image.png…]()
