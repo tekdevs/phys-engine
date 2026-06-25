@@ -1,6 +1,10 @@
 
+
 # phys-engine
-### **3D Custom Python Game Engine**
+### **About**
+Phys Engine is a 3D game engine & editor written completely from scratch in Python, utilising low level libraries in order to create complex and optimised games intuitively.
+
+
 **Features**
 - 
 - 3D Physics & Graphics Engine
