@@ -44,3 +44,5 @@ I personally decided to create the engine in Python as I felt as that there were
 - 3D Only (No 2D development)
 - Single-Player only (May add multiplayer later down the road)
 - No Real-Time global illumination and realistic lightmaps (Semi-simple graphical output only)
+
+<img width="1406" height="941" alt="Screenshot 2026-06-23 121844" src="https://github.com/user-attachments/assets/fac94a44-e960-406e-9df8-624f18e13ed7" />
