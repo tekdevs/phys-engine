@@ -13,6 +13,4 @@
 - Dynamic lighting & Skybox
 - & Many, many more...
 
-![Uploading image.png…]()
-
-**(Preview editor example)**
+<img width="488" height="511" alt="494-4941429_physics-logo-vector-free-download-physics-logo-png-removebg-preview" src="https://github.com/user-attachments/assets/95f80a5c-b9b7-404e-94bf-42a7d671d641" />
