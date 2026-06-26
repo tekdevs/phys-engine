@@ -38,7 +38,6 @@ I personally decided to create the engine in Python as I felt as that there were
 | json | Save/load scene files |
 | os | File paths, project directory scanning |
 | time | Delta time, FPS counting |
-| random | Scene randomization |
 | subprocess | Launching game process from editor |
 | copy | Deep copying nodes for duplicate/paste |
 | sys | Script path and argv for game launch |
