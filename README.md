@@ -50,3 +50,5 @@ I personally decided to create the engine in Python as I felt as that there were
 
 ## How it works
 To put it simply, the editor and engine work together to build the master `game.py` file which contains all the code responsible for running the game logic. `engine.py` contains the dependencies and `editor.py` is the visual editor to actually **"build"** the game. 
+
+<img width="2175" height="1781" alt="Blank diagram" src="https://github.com/user-attachments/assets/d61a1252-6823-4ee9-b531-60c323bc335d" />
