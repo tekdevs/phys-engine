@@ -21,7 +21,7 @@ I personally decided to create the engine in Python as I felt as that there were
 - Project management systems
 - Dynamic lighting & Skybox settings
 - Custom render texture pipelines
-- & Many more...
+- & many more...
 
 ## Dependencies
 
