@@ -1,5 +1,6 @@
 
 
+
 ## **About**
 Phys Engine is a 3D game engine & editor written completely from scratch in Python, utilising low level libraries in order to create complex and optimised games intuitively.
 
@@ -25,6 +26,7 @@ I personally decided to create the engine in Python as I felt as that there were
 - Custom render texture pipelines
 - & many more...
 
+
 ## Dependencies
 
 | Package | Install | Usage |
@@ -32,6 +34,9 @@ I personally decided to create the engine in Python as I felt as that there were
 | glfw | `pip install glfw` | Window creation, input handling (keyboard, mouse, scroll), OpenGL context |
 | PyOpenGL | `pip install PyOpenGL` | 3D rendering (GL) and camera projection (GLU) |
 | Pillow | `pip install Pillow` | Image/texture loading, font rendering for editor UI |
+| imgui | `pip install imgui[glfw]` | Dear ImGui bindings for editor UI panels, inspector, hierarchy, dialogs |
+| numpy | `pip install numpy` | Mesh normal calculations, array operations for vertex data |
+| trimesh | `pip install trimesh` | 3D model loading (.fbx, .obj, .gltf, .glb) |
 
 ## Standard Library
 
@@ -44,6 +49,12 @@ I personally decided to create the engine in Python as I felt as that there were
 | subprocess | Launching game process from editor |
 | copy | Deep copying nodes for duplicate/paste |
 | sys | Script path and argv for game launch |
+| re | Regex for string parsing in scene operations and project management |
+| random | Randomization in scene operations and engine init |
+| shutil | File copy/move operations in editor and asset panel |
+| importlib.util | Dynamic script loading for game components |
+| types | Runtime module type creation for script components |
+| tkinter | Native file browse dialogs (filedialog) |
 
 ## Limitations
 - 3D Only (No 2D development)
