@@ -57,7 +57,7 @@ Phys Engine is a 3D game engine & editor written completely in Python. The proje
 ## Limitations
 - 3D Only (No 2D development)
 - Single-Player only (May add multiplayer later down the road)
-- No Real-Time global illumination and realistic lightmaps (Semi-simple graphical output only)
+- No Real-Time global illumination and realistic lightmaps (Semi-realistic graphical output only)
 
 ## How it works
 To put it simply, the editor and engine work together to build the master `game.py` file which contains all the code responsible for running the game logic. `engine.py` contains the dependencies and `editor.py` is the visual editor to actually **"build"** the game. 
