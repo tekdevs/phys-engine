@@ -14,7 +14,7 @@ I personally decided to create the engine in Python as I felt as that there were
 
 ## Features
 - 3D Physics & Graphics Engine
-- Built-In Editor and IDE
+- Advanced Editor and Built-In IDE
 - Unity-Like scriptable components
 - Intuitive hierarchy and inspector to manage components
 - Advanced object gizmos
