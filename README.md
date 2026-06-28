@@ -11,7 +11,7 @@ I personally decided to create the engine in Python as I felt as that there were
 ***
 ***Early in-editor screenshot***
 
-<img width="1437" height="1034" alt="image" src="https://github.com/user-attachments/assets/973d85fb-ee88-41cc-a260-7e04be976560" />
+![Uploading image.png…]()
 
 ## Features
 - 3D Physics & Graphics Engine
