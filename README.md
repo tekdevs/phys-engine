@@ -9,7 +9,7 @@ Phys Engine is a 3D game engine & editor written completely in Python. The proje
 ***
 ***Early in-editor screenshot***
 
-<img width="1437" height="1034" alt="image" src="https://github.com/user-attachments/assets/4d60e916-8a31-46fe-a2d4-90afe536539f" />
+<img width="1437" height="1032" alt="image" src="https://github.com/user-attachments/assets/061cc91f-e275-40fd-b213-48d7a9989295" />
 
 ## Features
 - 3D Physics & Graphics Engine
