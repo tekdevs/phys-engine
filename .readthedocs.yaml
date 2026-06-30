@@ -10,7 +10,7 @@ build:
       - python -m pip install --upgrade pip
       - python -m pip install sphinx sphinx-rtd-theme
       - python -m pip install -r docs/requirements.txt
-    # 2. Build the documentation correctly
+    # 2. Tell Read the Docs exactly how to build your HTML format
     build:
-      commands:
+      html:
         - sphinx-build -b html docs/ $READTHEDOCS_OUTPUT/html
