@@ -5,12 +5,12 @@ build:
   tools:
     python: "3.11"
   jobs:
-    # 1. Install dependencies into the virtual environment
+    # 1. Force installation directly into the virtual environment path
     install:
-      - python -m pip install --upgrade pip
-      - python -m pip install sphinx sphinx-rtd-theme
-      - python -m pip install -r docs/requirements.txt
-    # 2. Build using the full path to sphinx-build inside the virtual environment
+      - $READTHEDOCS_VIRTUALENV_PATH/bin/pip install --upgrade pip
+      - $READTHEDOCS_VIRTUALENV_PATH/bin/pip install sphinx sphinx-rtd-theme
+      - $READTHEDOCS_VIRTUALENV_PATH/bin/pip install -r docs/requirements.txt
+    # 2. Run the build using that same virtual environment path
     build:
       html:
         - $READTHEDOCS_VIRTUALENV_PATH/bin/sphinx-build -b html docs/ $READTHEDOCS_OUTPUT/html
