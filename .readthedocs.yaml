@@ -4,10 +4,12 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.11"
-
-sphinx:
-  configuration: docs/conf.py
-
-python:
-  install:
-    - requirements: docs/requirements.txt
+  jobs:
+    # 1. Install your dependencies manually
+    install:
+      - python -m pip install --upgrade pip
+      - python -m pip install sphinx sphinx-rtd-theme
+      - python -m pip install -r docs/requirements.txt
+    # 2. Tell Sphinx exactly where your docs folder is
+    build:
+      - sphinx-build -b html docs/ $READTHEDOCS_OUTPUT/html
