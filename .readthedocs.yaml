@@ -5,11 +5,12 @@ build:
   tools:
     python: "3.11"
   jobs:
-    # 1. Install your dependencies manually
+    # 1. Install dependencies
     install:
       - python -m pip install --upgrade pip
       - python -m pip install sphinx sphinx-rtd-theme
       - python -m pip install -r docs/requirements.txt
-    # 2. Tell Sphinx exactly where your docs folder is
+    # 2. Build the documentation correctly
     build:
-      - sphinx-build -b html docs/ $READTHEDOCS_OUTPUT/html
+      commands:
+        - sphinx-build -b html docs/ $READTHEDOCS_OUTPUT/html
